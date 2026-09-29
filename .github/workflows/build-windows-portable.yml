@@ -58,9 +58,16 @@ jobs:
         id: locate
         shell: pwsh
         run: |
-          $app = Get-ChildItem -Directory -Recurse apps/desktop/.desktop-build/win-x64 |
+          $app = Get-ChildItem -Directory -Recurse apps/desktop/.desktop-build/targets/win-x64 |
             Where-Object { Test-Path (Join-Path $_.FullName 'DeepSeek Harness.exe') } |
             Select-Object -First 1
+
+          if (-not $app) {
+            $exe = Get-ChildItem -File -Recurse apps/desktop/.desktop-build/targets/win-x64 -Filter '*.exe' -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -like '*win-unpacked*' } |
+              Select-Object -First 1
+            if ($exe) { $app = Get-Item $exe.DirectoryName }
+          }
 
           if (-not $app) {
             Write-Host "Contents of .desktop-build:"
