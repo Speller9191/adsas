@@ -1,0 +1,99 @@
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows x64 Portable
+    runs-on: windows-2025
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm run build
+
+      - name: Configure unsigned Windows packaging
+        shell: pwsh
+        run: |
+          @"
+          DSH_DESKTOP_APP_ID=com.deepseek.harness
+          DSH_DESKTOP_AUTO_UPDATE_ENV=test
+          DOWNLOAD_TEST_ORIGIN=
+          DOWNLOAD_TEST_RELEASE_ID=
+          DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN=https://example.invalid
+          DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN=https://example.invalid
+          DSH_DESKTOP_MANDATORY_UPDATE_CONFIG={"allowedAuthOrigins":[]}
+          DSH_DESKTOP_WINDOWS_CER_FILE=
+          DSH_DESKTOP_WINDOWS_SIGNTOOL=
+          DSH_DESKTOP_WINDOWS_KEY_CONTAINER=
+          DSH_DESKTOP_WINDOWS_TOKEN_PIN=
+          DSH_DESKTOP_WINDOWS_SIGNATURE_CACHE_CONCURRENCY=4
+          "@ | Set-Content -Encoding utf8 apps/desktop/.env.windows
+
+      - name: Build Windows x64 portable directory
+        run: pnpm --dir apps/desktop run package:win:x64:unsigned --dir
+
+      - name: Locate packaged application
+        id: locate
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem -Directory -Recurse apps/desktop/.desktop-build/win-x64 |
+            Where-Object { Test-Path (Join-Path $_.FullName 'DeepSeek Harness.exe') } |
+            Select-Object -First 1
+
+          if (-not $app) {
+            Write-Host "Contents of .desktop-build:"
+            Get-ChildItem -Recurse apps/desktop/.desktop-build -ErrorAction SilentlyContinue |
+              Select-Object FullName
+            throw "DeepSeek Harness.exe was not found"
+          }
+
+          Write-Host "Portable application: $($app.FullName)"
+          "path=$($app.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $src = "${{ steps.locate.outputs.path }}"
+          $stage = Join-Path $env:RUNNER_TEMP "DeepSeek-Harness-Windows-x64-Portable"
+
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          Copy-Item "$src\*" $stage -Recurse -Force
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE "DeepSeek-Harness-Windows-x64-Portable.zip"
+          Remove-Item $zip -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal
+
+          Write-Host "Created: $zip"
+          Get-Item $zip | Select-Object Name, Length, FullName
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeek-Harness-Windows-x64-Portable
+          path: DeepSeek-Harness-Windows-x64-Portable.zip
+          if-no-files-found: error
+          retention-days: 14
