@@ -43,7 +43,7 @@ jobs:
           DOWNLOAD_TEST_RELEASE_ID=
           DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN=https://example.invalid
           DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN=https://example.invalid
-          DSH_DESKTOP_MANDATORY_UPDATE_CONFIG={"allowedAuthOrigins":[]}
+          DSH_DESKTOP_MANDATORY_UPDATE_CONFIG={"allowedAuthOrigins":["https://login.example.invalid"]}
           DSH_DESKTOP_WINDOWS_CER_FILE=
           DSH_DESKTOP_WINDOWS_SIGNTOOL=
           DSH_DESKTOP_WINDOWS_KEY_CONTAINER=
